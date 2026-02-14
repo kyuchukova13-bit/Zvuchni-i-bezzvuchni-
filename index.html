@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+    <meta charset="UTF-8">
+    <title>ЕЗИКОВ ШАМПИОН - НИВА ПО 5 ДУМИ</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+    <script src="https://unpkg.com/ml5@0.12.2/dist/ml5.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@700;900&display=swap');
+        
+        body { 
+            margin: 0; font-family: 'Montserrat', sans-serif; 
+            background: linear-gradient(180deg, #e3f2fd 0%, #90caf9 100%); 
+            overflow: hidden; display: flex; flex-direction: column; height: 100vh;
+        }
+
+        .top-bar {
+            width: 100%; padding: 10px 30px; 
+            display: flex; justify-content: space-between; align-items: center;
+            box-sizing: border-box; background: rgba(255,255,255,0.6);
+            backdrop-filter: blur(5px);
+        }
+
+        .badge {
+            font-size: 1.2em; font-weight: 900; color: #1565c0;
+            background: white; padding: 8px 20px; border-radius: 20px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1); border: 2px solid #1565c0;
+            margin-right: 10px;
+        }
+
+        .game-stage {
+            flex: 1; display: flex; justify-content: space-between; align-items: flex-start;
+            width: 100%; padding: 20px 50px; box-sizing: border-box; position: relative;
+        }
+
+        .side-column { width: 250px; display: flex; flex-direction: column; align-items: center; z-index: 10; }
+
+        .option-bubble {
+            width: 150px; height: 150px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            border: 6px solid white; box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+            margin-bottom: 20px; transition: transform 0.2s;
+        }
+        .option-bubble h2 { font-size: 4.5em; margin: 0; color: white; }
+
+        .voiced-dark { background: linear-gradient(135deg, #1565c0, #0d47a1); }
+        .voiceless-light { background: linear-gradient(135deg, #42a5f5, #2196f3); }
+
+        .label-tag {
+            background: white; padding: 5px 15px; border-radius: 10px;
+            color: #555; font-weight: bold; margin-bottom: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .gesture-img { width: 100%; height: auto; filter: drop-shadow(0 5px 15px rgba(0,0,0,0.2)); }
+
+        .center-column { flex: 1; display: flex; flex-direction: column; align-items: center; margin-top: 30px; }
+
+        .word-box {
+            background: white; padding: 25px 60px; border-radius: 50px;
+            border: 8px solid #0277bd; color: #01579b;
+            font-size: 5em; font-weight: 900; letter-spacing: 3px;
+            box-shadow: 0 15px 40px rgba(0,0,0,0.15); text-align: center; min-width: 450px;
+        }
+
+        .check-text {
+            margin-top: 40px; background: #fff9c4; color: #333; 
+            padding: 15px 50px; border-radius: 30px; font-size: 2em; font-weight: bold;
+            border: 4px solid #fbc02d; opacity: 0; transform: scale(0.8); transition: 0.5s;
+        }
+        .check-text.visible { opacity: 1; transform: scale(1); }
+
+        .missing-char { color: #ff9800; text-decoration: underline; }
+        .filled-char { color: #d32f2f; font-size: 1.1em; animation: pop 0.5s; display: inline-block; }
+        @keyframes pop { 50% { transform: scale(1.3); } }
+
+        #hidden-cam { position: absolute; opacity: 0; pointer-events: none; width: 1px; height: 1px; }
+
+        .overlay { 
+            position: fixed; inset: 0; background: rgba(227, 242, 253, 0.98);
+            display: flex; align-items: center; justify-content: center; z-index: 1000;
+        }
+        .modal {
+            background: white; padding: 40px; border-radius: 40px; text-align: center;
+            box-shadow: 0 30px 60px rgba(0,0,0,0.2); max-width: 700px; border: 10px solid #bbdefb;
+        }
+        .btn-start {
+            background: linear-gradient(45deg, #ff9800, #f57c00); color: white;
+            font-size: 2em; padding: 20px 70px; border-radius: 60px; border: none;
+            cursor: pointer; margin-top: 25px; font-weight: 900;
+        }
+
+        .loading { border-color: #ffeb3b !important; transform: scale(1.1); }
+        
+        .correct-msg { color: #2e7d32; font-size: 1.8em; font-weight: bold; }
+        .error-msg { color: #c62828; font-size: 1.8em; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div class="top-bar">
+        <div style="display:flex;">
+            <div class="badge">УЧЕНИК №: <span id="levelNum">1</span></div>
+            <div class="badge">ДУМА: <span id="wordProgress">1</span> / 5</div>
+            <div class="badge">ГРЕШКИ: <span id="errorCount">0</span></div>
+        </div>
+        <button class="badge" style="cursor:pointer" onclick="location.reload()">МЕНЮ</button>
+    </div>
+
+    <div class="game-stage">
+        <div class="side-column">
+            <div id="bubbleL" class="option-bubble"><h2 id="ansL">?</h2></div>
+            <div class="label-tag">ЗВУЧЕН</div>
+            <img class="gesture-img" src="level1_left.png">
+        </div>
+        <div class="center-column">
+            <div class="word-box" id="wordDisplay">...</div>
+            <div id="checkText" class="check-text">ПРОВЕРКА</div>
+        </div>
+        <div class="side-column">
+            <div id="bubbleR" class="option-bubble"><h2 id="ansR">?</h2></div>
+            <div class="label-tag">БЕЗЗВУЧЕН</div>
+            <img class="gesture-img" src="level1_right.png">
+        </div>
+    </div>
+
+    <div id="hidden-cam"></div>
+
+  <div id="start-screen" class="overlay">
+    <div class="modal">
+        <h1 style="color:#1565c0; font-size: 3em;">ЕЗИКОВ ШАМПИОН</h1>
+        <p style="font-size: 1.3em;">Ниво: 5 думи</p>
+        <div id="preview-box" ... ></div>
+        <button class="btn-start" onclick="startGame()">ЗАПОЧНИ</button>
+        
+        <p style="margin-top: 20px; color: #546e7a; font-weight: bold;">Създадено от: ДОЧКА КЮЧУКОВА</p>
+    </div>
+</div>
+
+    <div id="level-screen" class="overlay" style="display:none;">
+        <div class="modal">
+            <h1 style="font-size: 3em; color: #1565c0;">КРАЙ НА ТВОЕТО НИВО!</h1>
+            <p id="levelResultStats" style="font-size: 1.6em; color: #333; margin: 10px 0;"></p>
+            <div id="levelComment" style="margin: 30px 0;"></div>
+            <button id="nextBtn" class="btn-start" onclick="startNextLevel()">СЛЕДВАЩ УЧЕНИК</button>
+        </div>
+    </div>
+
+<script>
+    let video, poseNet, poses = [];
+    let isPlaying = false;
+    let holdCounter = 0;
+    let lastDetectedSide = null;
+    let currentStudent = 1;
+    let wordsInLevelCount = 0;
+    let levelErrors = 0;
+    let currentWord = null;
+    let availableWords = [];
+
+    const fullWordList = [
+    // --- Група Б - П ---
+    { w: "ХЛЯ_", a: "Б", x: "П", c: "ХЛЯБОВЕ" },
+    { w: "ДЪ_", a: "Б", x: "П", c: "ДЪБОВЕ" },
+    { w: "КОРА_", a: "Б", x: "П", c: "КОРАБИ" },
+    { w: "ГЪЛЪ_", a: "Б", x: "П", c: "ГЪЛЪБИ" },
+    { w: "ЗЪ_", a: "Б", x: "П", c: "ЗЪБИ" },
+    { w: "ДРО_", a: "Б", x: "П", c: "ДРОБОВЕ" },
+    { w: "СТЪЛ_", a: "Б", x: "П", c: "СТЪЛБОВЕ" },
+    { w: "ЯСТРЕ_", a: "Б", x: "П", c: "ЯСТРЕБИ" },
+    { w: "ГРЪ_", a: "Б", x: "П", c: "ГЪРБОВЕ" },
+    { w: "КЛУ_", a: "Б", x: "П", c: "КЛУБОВЕ" },
+    { w: "СНО_", a: "П", x: "Б", c: "СНОПОВЕ" },
+    { w: "ПРИЛЕ_", a: "П", x: "Б", c: "ПРИЛЕПИ" },
+    { w: "ОКО_", a: "П", x: "Б", c: "ОКОПИ" },
+    { w: "БО_", a: "Б", x: "П", c: "БОБА" },
+
+    // --- Група В - Ф ---
+    { w: "МОЛИ_", a: "В", x: "Ф", c: "МОЛИВИ" },
+    { w: "ОБУ_КИ", a: "В", x: "Ф", c: "ОБУВАМ" },
+    { w: "ОСТРО_", a: "В", x: "Ф", c: "ОСТРОВИ" },
+    { w: "РЪКА_", a: "В", x: "Ф", c: "РЪКАВИ" },
+    { w: "ЛЪ_", a: "В", x: "Ф", c: "ЛЪВОВЕ" },
+    { w: "МОРКО_", a: "В", x: "Ф", c: "МОРКОВИ" },
+    { w: "ЖИРА_", a: "Ф", x: "В", c: "ЖИРАФИ" },
+    { w: "КАРТО_", a: "Ф", x: "В", c: "КАРТОФИ" },
+    { w: "ШАР_", a: "Ф", x: "В", c: "ШАРФОВЕ" },
+    { w: "КОСМОНА_Т", a: "В", x: "Ф", c: "КОСМОНАВТИ" },
+
+    // --- Група Г - К ---
+    { w: "СНЯ_", a: "Г", x: "К", c: "СНЕГОВЕ" },
+    { w: "КРЪ_", a: "Г", x: "К", c: "КРЪГОВЕ" },
+    { w: "БРЯ_", a: "Г", x: "К", c: "БРЕГОВЕ" },
+    { w: "ПРА_", a: "Г", x: "К", c: "ПРАГОВЕ" },
+    { w: "ВРА_", a: "Г", x: "К", c: "ВРАГОВЕ" },
+    { w: "БЕЛЕ_", a: "Г", x: "К", c: "БЕЛЕГА" },
+    { w: "ВЛА_", a: "К", x: "Г", c: "ВЛАКОВЕ" },
+    { w: "БЛО_", a: "К", x: "Г", c: "БЛОКОВЕ" },
+    { w: "УРО_", a: "К", x: "Г", c: "УРОКА" },
+    { w: "ЕЗИ_", a: "К", x: "Г", c: "ЕЗИКА" },
+
+    // --- Група Д - Т ---
+    { w: "ГРА_", a: "Д", x: "Т", c: "ГРАДОВЕ" },
+    { w: "ШОКОЛА_", a: "Д", x: "Т", c: "ШОКОЛАДИ" },
+    { w: "МЛА_", a: "Д", x: "Т", c: "МЛАДИ" },
+    { w: "ВХО_", a: "Д", x: "Т", c: "ВХОДОВЕ" },
+    { w: "ТРУ_", a: "Д", x: "Т", c: "ТРУДА" },
+    { w: "СТУ_", a: "Д", x: "Т", c: "СТУДОВЕ" },
+    { w: "МОС_", a: "Т", x: "Д", c: "МОСТОВЕ" },
+    { w: "ЦВЯ_", a: "Т", x: "Д", c: "ЦВЕТОВЕ" },
+    { w: "БУКЕ_", a: "Т", x: "Д", c: "БУКЕТИ" },
+
+    // --- Група Ж - Ш ---
+    { w: "ЕТА_", a: "Ж", x: "Ш", c: "ЕТАЖИ" },
+    { w: "ГАРА_", a: "Ж", x: "Ш", c: "ГАРАЖИ" },
+    { w: "МЪ_", a: "Ж", x: "Ш", c: "МЪЖЕ" },
+    { w: "ТАРАЛЕ_", a: "Ж", x: "Ш", c: "ТАРАЛЕЖИ" },
+    { w: "КО_", a: "Ш", x: "Ж", c: "КОШОВЕ" },
+    { w: "МИ_КА", a: "Ш", x: "Ж", c: "МИШИ" },
+
+    // --- Група З - С ---
+    { w: "МРА_", a: "З", x: "С", c: "МРАЗОВИТ" },
+    { w: "ВОДОЛА_", a: "З", x: "С", c: "ВОДОЛАЗИ" },
+    { w: "НО_", a: "С", x: "З", c: "НОСОВЕ" },
+    { w: "АВТОБУ_", a: "С", x: "З", c: "АВТОБУСИ" },
+    { w: "ГЛА_", a: "С", x: "З", c: "ГЛАСОВЕ" }
+];
+    function setup() {
+        video = createCapture(VIDEO);
+        video.size(320, 240);
+        video.parent('preview-box');
+        poseNet = ml5.poseNet(video, { flipHorizontal: true }, () => console.log('ML Ready'));
+        poseNet.on('pose', results => poses = results);
+        availableWords = [...fullWordList];
+    }
+
+    function startGame() {
+        document.getElementById('start-screen').style.display = 'none';
+        video.parent('hidden-cam');
+        startLevel();
+    }
+
+    function startLevel() {
+        wordsInLevelCount = 0;
+        levelErrors = 0;
+        document.getElementById('levelNum').innerText = currentStudent;
+        document.getElementById('errorCount').innerText = 0;
+        nextRound();
+    }
+
+    function nextRound() {
+        if (wordsInLevelCount >= 5) { // Промяна: нивото свършва на 5-тата дума
+            endLevel();
+            return;
+        }
+        isPlaying = false; holdCounter = 0;
+        document.getElementById('checkText').classList.remove('visible');
+        document.getElementById('wordProgress').innerText = wordsInLevelCount + 1;
+        
+        let randomIndex = Math.floor(Math.random() * availableWords.length);
+        currentWord = availableWords[randomIndex];
+        availableWords.splice(randomIndex, 1);
+
+        document.getElementById('wordDisplay').innerHTML = currentWord.w.replace('_', '<span class="missing-char">_</span>');
+        let isLeftCorrect = Math.random() > 0.5;
+        setupBubble('L', isLeftCorrect ? currentWord.a : currentWord.x);
+        setupBubble('R', isLeftCorrect ? currentWord.x : currentWord.a);
+        currentWord.correctSide = isLeftCorrect ? 'L' : 'R';
+        setTimeout(() => isPlaying = true, 1000);
+    }
+
+    function setupBubble(side, char) {
+        let el = document.getElementById('bubble' + side);
+        document.getElementById('ans' + side).innerText = char;
+        el.className = 'option-bubble ' + (['Б','В','Г','Д','Ж','З'].includes(char) ? 'voiced-dark' : 'voiceless-light');
+    }
+
+    function draw() {
+        if (!isPlaying || poses.length === 0) return;
+        let p = poses[0].pose;
+        let noseY = p.nose.y;
+        let detected = (p.leftWrist.y < noseY) ? 'L' : (p.rightWrist.y < noseY) ? 'R' : null;
+
+        if (detected && detected === lastDetectedSide) {
+            holdCounter++;
+            document.getElementById('bubble' + detected).classList.add('loading');
+            if (holdCounter > 30) processAnswer(detected);
+        } else {
+            holdCounter = 0; lastDetectedSide = detected;
+            document.getElementById('bubbleL').classList.remove('loading');
+            document.getElementById('bubbleR').classList.remove('loading');
+        }
+    }
+
+    function processAnswer(side) {
+        isPlaying = false;
+        if (side === currentWord.correctSide) {
+            document.getElementById('wordDisplay').innerHTML = currentWord.w.replace('_', `<span class="filled-char">${currentWord.a}</span>`);
+            let checkEl = document.getElementById('checkText');
+            checkEl.innerText = "Защото казваме: " + currentWord.c;
+            checkEl.classList.add('visible');
+            wordsInLevelCount++;
+            setTimeout(nextRound, 3000);
+        } else {
+            levelErrors++;
+            document.getElementById('errorCount').innerText = levelErrors;
+            document.getElementById('bubble' + side).style.background = '#e53935';
+            setTimeout(() => {
+                document.getElementById('bubble' + side).style.background = '';
+                isPlaying = true; holdCounter = 0;
+            }, 1000);
+        }
+    }
+
+    function endLevel() {
+        document.getElementById('level-screen').style.display = 'flex';
+        let stats = document.getElementById('levelResultStats');
+        let comment = document.getElementById('levelComment');
+        
+        stats.innerText = `Решени думи: 5 | Общо грешки: ${levelErrors}`;
+        
+        if (levelErrors === 0) {
+            comment.innerHTML = "<div class='correct-msg'>🌟 БРАВО! ТИ СИ ШАМПИОН! 🌟<br>Реши всичко без нито една грешка!</div>";
+        } else if (levelErrors <= 2) {
+            comment.innerHTML = `<div class='correct-msg'>Много добре!<br>Имаш само ${levelErrors} грешки. Почти отличен!</div>`;
+        } else {
+            comment.innerHTML = `<div class='error-msg'>Опитай пак!<br>Направи ${levelErrors} грешки. Трябва още малко упражнения.</div>`;
+        }
+
+        if (availableWords.length < 5) {
+            document.getElementById('nextBtn').innerText = "ВСИЧКИ ДУМИ СА ИЗЧЕРПАНИ";
+            document.getElementById('nextBtn').onclick = () => location.reload();
+        }
+    }
+
+    function startNextLevel() {
+        currentStudent++;
+        document.getElementById('level-screen').style.display = 'none';
+        startLevel();
+    }
+</script>
+</body>
+</html>
