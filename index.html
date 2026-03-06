@@ -125,16 +125,21 @@
 
     <div id="hidden-cam"></div>
 
-  <div id="start-screen" class="overlay">
-    <div class="modal">
-        <h1 style="color:#1565c0; font-size: 3em;">ЕЗИКОВ ШАМПИОН</h1>
-        <p style="font-size: 1.3em;">Ниво: 5 думи</p>
-        <div id="preview-box" ... ></div>
-        <button class="btn-start" onclick="startGame()">ЗАПОЧНИ</button>
-        
-        <p style="margin-top: 20px; color: #546e7a; font-weight: bold;">Създадено от: ДОЧКА КЮЧУКОВА</p>
+    <div id="start-screen" class="overlay">
+        <div class="modal">
+            <h1 style="color:#1565c0; font-size: 3em;">ЕЗИКОВ ШАМПИОН</h1>
+            <p style="font-size: 1.3em;">Ниво: 5 думи</p>
+            
+            <div style="background: #e3f2fd; padding: 10px; border-radius: 10px; border: 1px dashed #1565c0; margin: 10px auto; max-width: 80%; font-size: 0.9em;">
+                👨‍🏫 <strong>За Учителя:</strong> Добавяйте нови задачи или качвайте файл чрез бутона ⚙️ долу вдясно.
+            </div>
+
+            <div id="preview-box"></div>
+            <button class="btn-start" onclick="startGame()">ЗАПОЧНИ</button>
+            
+            <p style="margin-top: 20px; color: #546e7a; font-weight: bold;">Създадено от: ДОЧКА КЮЧУКОВА</p>
+        </div>
     </div>
-</div>
 
     <div id="level-screen" class="overlay" style="display:none;">
         <div class="modal">
@@ -144,6 +149,25 @@
             <button id="nextBtn" class="btn-start" onclick="startNextLevel()">СЛЕДВАЩ УЧЕНИК</button>
         </div>
     </div>
+
+    <div id="teacher-panel-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:9999; justify-content:center; align-items:center;">
+        <div style="background:white; padding:30px; border-radius:15px; width:400px; font-family:sans-serif; text-align:left;">
+            <h2 style="color:#1565c0; margin-top:0;">⚙️ Учителски панел</h2>
+            <input type="text" id="tp-w" placeholder="Дума (напр. СЛЪН_Е)" style="width:100%; padding:10px; margin-bottom:10px; box-sizing:border-box; border:1px solid #ccc; border-radius:5px;">
+            <input type="text" id="tp-a" placeholder="Верен отговор (Ц)" style="width:100%; padding:10px; margin-bottom:10px; box-sizing:border-box; border:1px solid #ccc; border-radius:5px;">
+            <input type="text" id="tp-x" placeholder="Грешен отговор (С)" style="width:100%; padding:10px; margin-bottom:10px; box-sizing:border-box; border:1px solid #ccc; border-radius:5px;">
+            <input type="text" id="tp-c" placeholder="Проверочна дума (СЛЪНЦЕ)" style="width:100%; padding:10px; margin-bottom:20px; box-sizing:border-box; border:1px solid #ccc; border-radius:5px;">
+            <button onclick="saveTeacherWord()" style="width:100%; padding:10px; background:#1565c0; color:white; border:none; border-radius:5px; font-weight:bold; cursor:pointer; margin-bottom:10px;">ЗАПАЗИ ДУМАТА</button>
+            <hr style="margin:15px 0;">
+            <p style="font-size:12px; color:#555;"><b>Масово качване:</b> .txt файл (формат: дума,верен,грешен,проверка)</p>
+            <input type="file" id="tp-file" style="display:none" onchange="uploadTeacherFile(event)">
+            <button onclick="document.getElementById('tp-file').click()" style="width:100%; padding:10px; background:#4caf50; color:white; border:none; border-radius:5px; font-weight:bold; cursor:pointer; margin-bottom:10px;">📁 КАЧИ .TXT ФАЙЛ</button>
+            <button onclick="clearTeacherWords()" style="width:100%; padding:10px; background:#d32f2f; color:white; border:none; border-radius:5px; font-weight:bold; cursor:pointer; margin-bottom:10px;">🗑️ ИЗТРИЙ МОИТЕ ДУМИ</button>
+            <button onclick="closeTeacherPanel()" style="width:100%; padding:10px; background:#777; color:white; border:none; border-radius:5px; font-weight:bold; cursor:pointer;">ЗАТВОРИ</button>
+        </div>
+    </div>
+    
+    <button onclick="openTeacherPanel()" style="position:fixed; bottom:20px; right:20px; width:60px; height:60px; border-radius:50%; background:#1565c0; color:white; border:none; font-size:30px; cursor:pointer; z-index:9998; box-shadow:0 4px 10px rgba(0,0,0,0.3);">⚙️</button>
 
 <script>
     let video, poseNet, poses = [];
@@ -222,14 +246,22 @@
     { w: "НО_", a: "С", x: "З", c: "НОСОВЕ" },
     { w: "АВТОБУ_", a: "С", x: "З", c: "АВТОБУСИ" },
     { w: "ГЛА_", a: "С", x: "З", c: "ГЛАСОВЕ" }
-];
+    ];
+
     function setup() {
         video = createCapture(VIDEO);
         video.size(320, 240);
         video.parent('preview-box');
         poseNet = ml5.poseNet(video, { flipHorizontal: true }, () => console.log('ML Ready'));
         poseNet.on('pose', results => poses = results);
-        availableWords = [...fullWordList];
+        
+        // ДОБАВЕНО: Логика за зареждане на думи от учителя
+        let customWordsList = JSON.parse(localStorage.getItem('teacher_data_v1')) || [];
+        if(customWordsList.length > 0) {
+            availableWords = [...customWordsList];
+        } else {
+            availableWords = [...fullWordList];
+        }
     }
 
     function startGame() {
@@ -335,6 +367,58 @@
         currentStudent++;
         document.getElementById('level-screen').style.display = 'none';
         startLevel();
+    }
+
+    // ДОБАВЕНО: Функции за Учителския панел
+    function openTeacherPanel() { document.getElementById('teacher-panel-modal').style.display = 'flex'; }
+    function closeTeacherPanel() { document.getElementById('teacher-panel-modal').style.display = 'none'; }
+
+    function saveTeacherWord() {
+        const w = document.getElementById('tp-w').value;
+        const a = document.getElementById('tp-a').value;
+        const x = document.getElementById('tp-x').value;
+        const c = document.getElementById('tp-c').value;
+        
+        if(!w || !a || !x || !c) return alert("Моля, попълнете всички полета!");
+        
+        let customWordsList = JSON.parse(localStorage.getItem('teacher_data_v1')) || [];
+        customWordsList.push({ w: w, a: a, x: x, c: c });
+        localStorage.setItem('teacher_data_v1', JSON.stringify(customWordsList));
+        
+        alert("Думата е запазена!");
+        location.reload();
+    }
+
+    function uploadTeacherFile(event) {
+        const file = event.target.files[0];
+        if(!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const lines = e.target.result.split('\n');
+            let customWordsList = JSON.parse(localStorage.getItem('teacher_data_v1')) || [];
+            lines.forEach(line => {
+                const parts = line.split(',');
+                if(parts.length >= 4) {
+                    customWordsList.push({
+                        w: parts[0].trim(),
+                        a: parts[1].trim(),
+                        x: parts[2].trim(),
+                        c: parts[3].trim()
+                    });
+                }
+            });
+            localStorage.setItem('teacher_data_v1', JSON.stringify(customWordsList));
+            alert("Файлът е зареден успешно!");
+            location.reload();
+        };
+        reader.readAsText(file);
+    }
+
+    function clearTeacherWords() {
+        if(confirm("Сигурни ли сте, че искате да изтриете всички ваши думи и да се върнете към първоначалните?")) {
+            localStorage.removeItem('teacher_data_v1');
+            location.reload();
+        }
     }
 </script>
 </body>
